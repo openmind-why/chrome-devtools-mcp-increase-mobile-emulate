@@ -87,6 +87,8 @@ export type Context = Readonly<{
   setCpuThrottlingRate(rate: number): void;
   setDeviceEmulation(device: string | null): void;
   getDeviceEmulation(): string | null;
+  getPages:() => Page[];
+  createPagesSnapshot(): Promise<Page[]> 
   saveTemporaryFile(
     data: Uint8Array<ArrayBufferLike>,
     mimeType: 'image/png' | 'image/jpeg' | 'image/webp',
