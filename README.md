@@ -1,3 +1,16 @@
+# 🔔 Temporary Fork Version
+
+> **be careful**：this is [chrome-devtools-mcp](https://github.com/ChromeDevTools/chrome-devtools-mcp) temporary fork version。
+> 
+> **Why does this package exist?**  
+> We have submitted a PR (# xxx) to the upstream and added more mobile device simulation functions. You can use this temporary version before PR is merged.
+>
+> **Recommended practice**：  
+> Once the upstream PR is merged, please switch back to the official one `chrome-devtools-mcp` 
+
+
+# The following is the original README content:
+
 # Chrome DevTools MCP
 
 [![npm chrome-devtools-mcp package](https://img.shields.io/npm/v/chrome-devtools-mcp.svg)](https://npmjs.org/package/chrome-devtools-mcp)

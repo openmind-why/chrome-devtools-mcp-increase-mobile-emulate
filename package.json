@@ -1,7 +1,7 @@
 {
-  "name": "chrome-devtools-mcp",
+  "name": "chrome-devtools-mcp-increase-devices-emulate-npm",
   "version": "0.4.0",
-  "description": "MCP server for Chrome DevTools",
+  "description": "基于 chrome-devtools-mcp 的扩展版本，增加了移动设备模拟功能",
   "type": "module",
   "bin": "./build/src/index.js",
   "main": "index.js",
@@ -27,14 +27,15 @@
     "LICENSE",
     "!*.tsbuildinfo"
   ],
-  "repository": "ChromeDevTools/chrome-devtools-mcp",
-  "author": "Google LLC",
+  "repository": "openmind-why/chrome-devtools-mcp-increase-mobile-emulate",
+  "author": "openmind-why",
   "license": "Apache-2.0",
   "bugs": {
-    "url": "https://github.com/ChromeDevTools/chrome-devtools-mcp/issues"
+    "url": "https://github.com/openmind-why/chrome-devtools-mcp-increase-mobile-emulate/tree/chrome-devtools-map-increase-devices-emulate-npm/issues"
   },
-  "homepage": "https://github.com/ChromeDevTools/chrome-devtools-mcp#readme",
-  "mcpName": "io.github.ChromeDevTools/chrome-devtools-mcp",
+  "homepage": "https://github.com/openmind-why/chrome-devtools-mcp-increase-mobile-emulate/tree/chrome-devtools-map-increase-devices-emulate-npm#readme",
+  "keywords": ["chrome-devtools", "mcp", "fork", "mobile-emulation"],
+  "mcpName": "io.github.openmind-why/chrome-devtools-mcp-increase-devices-emulate-npm",
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.18.1",
     "debug": "4.4.3",
