@@ -70,6 +70,8 @@ export type Context = Readonly<{
   getElementByUid(uid: string): Promise<ElementHandle<Element>>;
   setNetworkConditions(conditions: string | null): void;
   setCpuThrottlingRate(rate: number): void;
+  setDeviceEmulation(device: string | null): void;
+  getDeviceEmulation(): string | null;
   saveTemporaryFile(
     data: Uint8Array<ArrayBufferLike>,
     mimeType: 'image/png' | 'image/jpeg' | 'image/webp',
