@@ -21,40 +21,40 @@ describe('networkFormatter', () => {
   describe('getShortDescriptionForRequest', () => {
     it('works', async () => {
       const request = getMockRequest();
-      const result = getShortDescriptionForRequest(request);
+      const result = getShortDescriptionForRequest(request, 1);
 
-      assert.equal(result, 'http://example.com GET [pending]');
+      assert.equal(result, 'reqid=1 GET http://example.com [pending]');
     });
     it('shows correct method', async () => {
       const request = getMockRequest({method: 'POST'});
-      const result = getShortDescriptionForRequest(request);
+      const result = getShortDescriptionForRequest(request, 1);
 
-      assert.equal(result, 'http://example.com POST [pending]');
+      assert.equal(result, 'reqid=1 POST http://example.com [pending]');
     });
     it('shows correct status for request with response code in 200', async () => {
       const response = getMockResponse();
       const request = getMockRequest({response});
-      const result = getShortDescriptionForRequest(request);
+      const result = getShortDescriptionForRequest(request, 1);
 
-      assert.equal(result, 'http://example.com GET [success - 200]');
+      assert.equal(result, 'reqid=1 GET http://example.com [success - 200]');
     });
     it('shows correct status for request with response code in 100', async () => {
       const response = getMockResponse({
         status: 199,
       });
       const request = getMockRequest({response});
-      const result = getShortDescriptionForRequest(request);
+      const result = getShortDescriptionForRequest(request, 1);
 
-      assert.equal(result, 'http://example.com GET [failed - 199]');
+      assert.equal(result, 'reqid=1 GET http://example.com [failed - 199]');
     });
     it('shows correct status for request with response code above 200', async () => {
       const response = getMockResponse({
         status: 300,
       });
       const request = getMockRequest({response});
-      const result = getShortDescriptionForRequest(request);
+      const result = getShortDescriptionForRequest(request, 1);
 
-      assert.equal(result, 'http://example.com GET [failed - 300]');
+      assert.equal(result, 'reqid=1 GET http://example.com [failed - 300]');
     });
     it('shows correct status for request that failed', async () => {
       const request = getMockRequest({
@@ -64,11 +64,11 @@ describe('networkFormatter', () => {
           };
         },
       });
-      const result = getShortDescriptionForRequest(request);
+      const result = getShortDescriptionForRequest(request, 1);
 
       assert.equal(
         result,
-        'http://example.com GET [failed - Error in Network]',
+        'reqid=1 GET http://example.com [failed - Error in Network]',
       );
     });
   });
@@ -115,7 +115,7 @@ describe('networkFormatter', () => {
 
       assert.strictEqual(result, 'test');
     });
-    it('shows empty string when no postData available', async () => {
+    it('shows not available when no postData available', async () => {
       const request = getMockRequest({
         hasPostData: false,
       });
@@ -164,7 +164,7 @@ describe('networkFormatter', () => {
 
       assert.strictEqual(result, 'some text that is lo... <truncated>');
     });
-    it('shows nothing on exception', async () => {
+    it('shows not available on exception', async () => {
       const request = getMockRequest({
         hasPostData: true,
         postData: undefined,
@@ -173,7 +173,7 @@ describe('networkFormatter', () => {
 
       const result = await getFormattedRequestBody(request, 200);
 
-      assert.strictEqual(result, undefined);
+      assert.strictEqual(result, '<not available anymore>');
     });
   });
 
@@ -232,7 +232,7 @@ describe('networkFormatter', () => {
 
       const result = await getFormattedResponseBody(response, 200);
 
-      assert.strictEqual(result, undefined);
+      assert.strictEqual(result, '<not available anymore>');
     });
   });
 });

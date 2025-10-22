@@ -29,8 +29,9 @@
 - **[Network](#network)** (2 tools)
   - [`get_network_request`](#get_network_request)
   - [`list_network_requests`](#list_network_requests)
-- **[Debugging](#debugging)** (4 tools)
+- **[Debugging](#debugging)** (5 tools)
   - [`evaluate_script`](#evaluate_script)
+  - [`get_console_message`](#get_console_message)
   - [`list_console_messages`](#list_console_messages)
   - [`take_screenshot`](#take_screenshot)
   - [`take_snapshot`](#take_snapshot)
@@ -200,11 +201,11 @@
 
 ### `emulate_network`
 
-**Description:** Emulates network conditions such as throttling on the selected page.
+**Description:** Emulates network conditions such as throttling or offline mode on the selected page.
 
 **Parameters:**
 
-- **throttlingOption** (enum: "No emulation", "Slow 3G", "Fast 3G", "Slow 4G", "Fast 4G") **(required)**: The network throttling option to emulate. Available throttling options are: No emulation, Slow 3G, Fast 3G, Slow 4G, Fast 4G. Set to "No emulation" to disable.
+- **throttlingOption** (enum: "No emulation", "Offline", "Slow 3G", "Fast 3G", "Slow 4G", "Fast 4G") **(required)**: The network throttling option to emulate. Available throttling options are: No emulation, Offline, Slow 3G, Fast 3G, Slow 4G, Fast 4G. Set to "No emulation" to disable. Set to "Offline" to simulate offline network conditions.
 
 ---
 
@@ -258,16 +259,17 @@
 
 **Parameters:**
 
-- **url** (string) **(required)**: The URL of the request.
+- **reqid** (number) **(required)**: The reqid of a request on the page from the listed network requests
 
 ---
 
 ### `list_network_requests`
 
-**Description:** List all requests for the currently selected page
+**Description:** List all requests for the currently selected page since the last navigation.
 
 **Parameters:**
 
+- **includePreviousNavigations** (boolean) _(optional)_: Whether to include requests from previous navigations.
 - **pageIdx** (integer) _(optional)_: Page number to return (0-based). When omitted, returns the first page.
 - **pageSize** (integer) _(optional)_: Maximum number of requests to return. When omitted, returns all requests.
 - **resourceTypes** (array) _(optional)_: Filter requests to only return requests of the specified resource types. When omitted or empty, returns all requests.
@@ -284,7 +286,7 @@ so returned values have to JSON-serializable.
 **Parameters:**
 
 - **args** (array) _(optional)_: An optional list of arguments to pass to the function.
-- **function** (string) **(required)**: A JavaScript function to run in the currently selected page.
+- **function** (string) **(required)**: A JavaScript function declaration to be executed by the tool in the currently selected page.
   Example without arguments: `() => {
   return document.title
 }` or `async () => {
@@ -296,11 +298,26 @@ so returned values have to JSON-serializable.
 
 ---
 
+### `get_console_message`
+
+**Description:** Gets a console message by its ID. You can get all messages by calling [`list_console_messages`](#list_console_messages).
+
+**Parameters:**
+
+- **msgid** (number) **(required)**: The msgid of a console message on the page from the listed console messages
+
+---
+
 ### `list_console_messages`
 
-**Description:** List all console messages for the currently selected page
+**Description:** List all console messages for the currently selected page since the last navigation.
 
-**Parameters:** None
+**Parameters:**
+
+- **includePreviousNavigations** (boolean) _(optional)_: Whether to include messages from previous navigations.
+- **pageIdx** (integer) _(optional)_: Page number to return (0-based). When omitted, returns the first page.
+- **pageSize** (integer) _(optional)_: Maximum number of messages to return. When omitted, returns all requests.
+- **types** (array) _(optional)_: Filter messages to only return messages of the specified resource types. When omitted or empty, returns all messages.
 
 ---
 
@@ -320,9 +337,11 @@ so returned values have to JSON-serializable.
 
 ### `take_snapshot`
 
-**Description:** Take a text snapshot of the currently selected page. The snapshot lists page elements along with a unique
+**Description:** Take a text snapshot of the currently selected page based on the a11y tree. The snapshot lists page elements along with a unique
 identifier (uid). Always use the latest snapshot. Prefer taking a snapshot over taking a screenshot.
 
-**Parameters:** None
+**Parameters:**
+
+- **verbose** (boolean) _(optional)_: Whether to include all possible information available in the full a11y tree. Default is false.
 
 ---

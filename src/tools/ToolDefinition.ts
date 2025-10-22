@@ -4,14 +4,17 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Dialog, ElementHandle, Page } from 'puppeteer-core';
-import type z from 'zod';
-
-import type { TraceResult } from '../trace-processing/parse.js';
+import type {TextSnapshotNode} from '../McpContext.js';
+import {zod} from '../third_party/index.js';
+import type {Dialog, ElementHandle, Page} from '../third_party/index.js';
+import type {TraceResult} from '../trace-processing/parse.js';
+import type {PaginationOptions} from '../utils/types.js';
 
 import type { ToolCategories } from './categories.js';
 
-export interface ToolDefinition<Schema extends z.ZodRawShape = z.ZodRawShape> {
+export interface ToolDefinition<
+  Schema extends zod.ZodRawShape = zod.ZodRawShape,
+> {
   name: string;
   description: string;
   annotations: {
@@ -30,8 +33,8 @@ export interface ToolDefinition<Schema extends z.ZodRawShape = z.ZodRawShape> {
   ) => Promise<void>;
 }
 
-export interface Request<Schema extends z.ZodRawShape> {
-  params: z.objectOutputType<Schema, z.ZodTypeAny>;
+export interface Request<Schema extends zod.ZodRawShape> {
+  params: zod.objectOutputType<Schema, zod.ZodTypeAny>;
 }
 
 export interface ImageContentData {
@@ -44,12 +47,23 @@ export interface Response {
   setIncludePages(value: boolean): void;
   setIncludeNetworkRequests(
     value: boolean,
-    options?: { pageSize?: number; pageIdx?: number; resourceTypes?: string[] },
+    options?: PaginationOptions & {
+      resourceTypes?: string[];
+      includePreviousNavigations?: boolean;
+    },
   ): void;
-  setIncludeConsoleData(value: boolean): void;
+  setIncludeConsoleData(
+    value: boolean,
+    options?: PaginationOptions & {
+      types?: string[];
+      includePreviousNavigations?: boolean;
+    },
+  ): void;
   setIncludeSnapshot(value: boolean): void;
+  setIncludeSnapshot(value: boolean, verbose?: boolean): void;
   attachImage(value: ImageContentData): void;
-  attachNetworkRequest(url: string): void;
+  attachNetworkRequest(reqid: number): void;
+  attachConsoleMessage(msgid: number): void;
 }
 
 /**
@@ -68,6 +82,7 @@ export type Context = Readonly<{
   closePage(pageIdx: number): Promise<void>;
   setSelectedPageIdx(idx: number): void;
   getElementByUid(uid: string): Promise<ElementHandle<Element>>;
+  getAXNodeByUid(uid: string): TextSnapshotNode | undefined;
   setNetworkConditions(conditions: string | null): void;
   setCpuThrottlingRate(rate: number): void;
   setDeviceEmulation(device: string | null): void;
@@ -81,12 +96,13 @@ export type Context = Readonly<{
     filename: string,
   ): Promise<{filename: string}>;
   waitForEventsAfterAction(action: () => Promise<unknown>): Promise<void>;
-  // Added for multi-page device emulation support
-  createPagesSnapshot(): Promise<Page[]>;
-  getPages(): Page[];
+  waitForTextOnPage(params: {
+    text: string;
+    timeout?: number | undefined;
+  }): Promise<Element>;
 }>;
 
-export function defineTool<Schema extends z.ZodRawShape>(
+export function defineTool<Schema extends zod.ZodRawShape>(
   definition: ToolDefinition<Schema>,
 ) {
   return definition;
@@ -96,7 +112,7 @@ export const CLOSE_PAGE_ERROR =
   'The last open page cannot be closed. It is fine to keep it open.';
 
 export const timeoutSchema = {
-  timeout: z
+  timeout: zod
     .number()
     .int()
     .optional()

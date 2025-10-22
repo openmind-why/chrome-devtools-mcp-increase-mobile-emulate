@@ -7,19 +7,20 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import type {Debugger} from 'debug';
+import type {ListenerMap} from './PageCollector.js';
+import {NetworkCollector, PageCollector} from './PageCollector.js';
+import {Locator} from './third_party/index.js';
 import type {
   Browser,
   ConsoleMessage,
+  Debugger,
   Dialog,
   ElementHandle,
   HTTPRequest,
   Page,
   SerializedAXNode,
   PredefinedNetworkConditions,
-} from 'puppeteer-core';
-
-import {NetworkCollector, PageCollector} from './PageCollector.js';
+} from './third_party/index.js';
 import {listPages} from './tools/pages.js';
 import {takeSnapshot} from './tools/snapshot.js';
 import {CLOSE_PAGE_ERROR} from './tools/ToolDefinition.js';
@@ -91,30 +92,35 @@ export class McpContext implements Context {
   #nextSnapshotId = 1;
   #traceResults: TraceResult[] = [];
 
-  private constructor(browser: Browser, logger: Debugger) {
+  #locatorClass: typeof Locator;
+
+  private constructor(
+    browser: Browser,
+    logger: Debugger,
+    locatorClass: typeof Locator,
+  ) {
     this.browser = browser;
     this.logger = logger;
+    this.#locatorClass = locatorClass;
 
-    this.#networkCollector = new NetworkCollector(
-      this.browser,
-      (page, collect) => {
-        page.on('request', request => {
-          collect(request);
-        });
-      },
-    );
+    this.#networkCollector = new NetworkCollector(this.browser);
 
-    this.#consoleCollector = new PageCollector(
-      this.browser,
-      (page, collect) => {
-        page.on('console', event => {
+    this.#consoleCollector = new PageCollector(this.browser, collect => {
+      return {
+        console: event => {
           collect(event);
-        });
-        page.on('pageerror', event => {
-          collect(event);
-        });
-      },
-    );
+        },
+        pageerror: event => {
+          if (event instanceof Error) {
+            collect(event);
+          } else {
+            const error = new Error(`${event}`);
+            error.stack = undefined;
+            collect(error);
+          }
+        },
+      } as ListenerMap;
+    });
   }
 
   async #init() {
@@ -124,20 +130,35 @@ export class McpContext implements Context {
     await this.#consoleCollector.init();
   }
 
-  static async from(browser: Browser, logger: Debugger) {
-    const context = new McpContext(browser, logger);
+  static async from(
+    browser: Browser,
+    logger: Debugger,
+    /* Let tests use unbundled Locator class to avoid overly strict checks within puppeteer that fail when mixing bundled and unbundled class instances */
+    locatorClass: typeof Locator = Locator,
+  ) {
+    const context = new McpContext(browser, logger, locatorClass);
     await context.#init();
     return context;
   }
 
-  getNetworkRequests(): HTTPRequest[] {
+  getNetworkRequests(includePreviousNavigations?: boolean): HTTPRequest[] {
     const page = this.getSelectedPage();
-    return this.#networkCollector.getData(page);
+    return this.#networkCollector.getData(page, includePreviousNavigations);
   }
 
-  getConsoleData(): Array<ConsoleMessage | Error> {
+  getConsoleData(
+    includePreviousNavigations?: boolean,
+  ): Array<ConsoleMessage | Error> {
     const page = this.getSelectedPage();
-    return this.#consoleCollector.getData(page);
+    return this.#consoleCollector.getData(page, includePreviousNavigations);
+  }
+
+  getConsoleMessageStableId(message: ConsoleMessage | Error): number {
+    return this.#consoleCollector.getIdForResource(message);
+  }
+
+  getConsoleMessageById(id: number): ConsoleMessage | Error {
+    return this.#consoleCollector.getById(this.getSelectedPage(), id);
   }
 
   async newPage(): Promise<Page> {
@@ -157,19 +178,8 @@ export class McpContext implements Context {
     await page.close({runBeforeUnload: false});
   }
 
-  getNetworkRequestByUrl(url: string): HTTPRequest {
-    const requests = this.getNetworkRequests();
-    if (!requests.length) {
-      throw new Error('No requests found for selected page');
-    }
-
-    for (const request of requests) {
-      if (request.url() === url) {
-        return request;
-      }
-    }
-
-    throw new Error('Request not found for selected page');
+  getNetworkRequestById(reqid: number): HTTPRequest {
+    return this.#networkCollector.getById(this.getSelectedPage(), reqid);
   }
 
   setNetworkConditions(conditions: string | null): void {
@@ -287,6 +297,10 @@ export class McpContext implements Context {
     return page.getDefaultNavigationTimeout();
   }
 
+  getAXNodeByUid(uid: string) {
+    return this.#textSnapshot?.idToNode.get(uid);
+  }
+
   async getElementByUid(uid: string): Promise<ElementHandle<Element>> {
     if (!this.#textSnapshot?.idToNode.size) {
       throw new Error(
@@ -327,10 +341,11 @@ export class McpContext implements Context {
   /**
    * Creates a text snapshot of a page.
    */
-  async createTextSnapshot(): Promise<void> {
+  async createTextSnapshot(verbose = false): Promise<void> {
     const page = this.getSelectedPage();
     const rootNode = await page.accessibility.snapshot({
       includeIframes: true,
+      interestingOnly: !verbose,
     });
     if (!rootNode) {
       return;
@@ -349,6 +364,16 @@ export class McpContext implements Context {
           ? node.children.map(child => assignIds(child))
           : [],
       };
+
+      // The AXNode for an option doesn't contain its `value`.
+      // Therefore, set text content of the option as value.
+      if (node.role === 'option') {
+        const optionText = node.name;
+        if (optionText) {
+          nodeWithId.value = optionText.toString();
+        }
+      }
+
       idToNode.set(nodeWithId.id, nodeWithId);
       return nodeWithId;
     };
@@ -427,5 +452,50 @@ export class McpContext implements Context {
       networkMultiplier,
     );
     return waitForHelper.waitForEventsAfterAction(action);
+  }
+
+  getNetworkRequestStableId(request: HTTPRequest): number {
+    return this.#networkCollector.getIdForResource(request);
+  }
+
+  waitForTextOnPage({
+    text,
+    timeout,
+  }: {
+    text: string;
+    timeout?: number | undefined;
+  }): Promise<Element> {
+    const page = this.getSelectedPage();
+    const frames = page.frames();
+
+    const locator = this.#locatorClass.race(
+      frames.flatMap(frame => [
+        frame.locator(`aria/${text}`),
+        frame.locator(`text/${text}`),
+      ]),
+    );
+
+    if (timeout) {
+      locator.setTimeout(timeout);
+    }
+
+    return locator.wait();
+  }
+
+  /**
+   * We need to ignore favicon request as they make our test flaky
+   */
+  async setUpNetworkCollectorForTesting() {
+    this.#networkCollector = new NetworkCollector(this.browser, collect => {
+      return {
+        request: req => {
+          if (req.url().includes('favicon.ico')) {
+            return;
+          }
+          collect(req);
+        },
+      } as ListenerMap;
+    });
+    await this.#networkCollector.init();
   }
 }

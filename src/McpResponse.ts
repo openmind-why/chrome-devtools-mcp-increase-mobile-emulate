@@ -3,13 +3,11 @@
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import type {
-  ImageContent,
-  TextContent,
-} from '@modelcontextprotocol/sdk/types.js';
-import type {ResourceType} from 'puppeteer-core';
-
-import {formatConsoleEvent} from './formatters/consoleFormatter.js';
+import type {ConsoleMessageData} from './formatters/consoleFormatter.js';
+import {
+  formatConsoleEventShort,
+  formatConsoleEventVerbose,
+} from './formatters/consoleFormatter.js';
 import {
   getFormattedHeaderValue,
   getFormattedResponseBody,
@@ -19,44 +17,52 @@ import {
 } from './formatters/networkFormatter.js';
 import {formatA11ySnapshot} from './formatters/snapshotFormatter.js';
 import type {McpContext} from './McpContext.js';
+import type {
+  ConsoleMessage,
+  ImageContent,
+  ResourceType,
+  TextContent,
+} from './third_party/index.js';
 import {handleDialog} from './tools/pages.js';
 import type {ImageContentData, Response} from './tools/ToolDefinition.js';
-import {paginate, type PaginationOptions} from './utils/pagination.js';
-
-interface NetworkRequestData {
-  networkRequestUrl: string;
-  requestBody?: string;
-  responseBody?: string;
-}
+import {paginate} from './utils/pagination.js';
+import type {PaginationOptions} from './utils/types.js';
 
 export class McpResponse implements Response {
   #includePages = false;
   #includeSnapshot = false;
-  #attachedNetworkRequestData?: NetworkRequestData;
-  #includeConsoleData = false;
+  #includeVerboseSnapshot = false;
+  #attachedNetworkRequestId?: number;
+  #attachedConsoleMessageId?: number;
   #textResponseLines: string[] = [];
-  #formattedConsoleData?: string[];
   #images: ImageContentData[] = [];
   #networkRequestsOptions?: {
     include: boolean;
     pagination?: PaginationOptions;
     resourceTypes?: ResourceType[];
+    includePreviousNavigations?: boolean;
+  };
+  #consoleDataOptions?: {
+    include: boolean;
+    pagination?: PaginationOptions;
+    types?: string[];
+    includePreviousNavigations?: boolean;
   };
 
   setIncludePages(value: boolean): void {
     this.#includePages = value;
   }
 
-  setIncludeSnapshot(value: boolean): void {
+  setIncludeSnapshot(value: boolean, verbose = false): void {
     this.#includeSnapshot = value;
+    this.#includeVerboseSnapshot = verbose;
   }
 
   setIncludeNetworkRequests(
     value: boolean,
-    options?: {
-      pageSize?: number;
-      pageIdx?: number;
+    options?: PaginationOptions & {
       resourceTypes?: ResourceType[];
+      includePreviousNavigations?: boolean;
     },
   ): void {
     if (!value) {
@@ -74,17 +80,42 @@ export class McpResponse implements Response {
             }
           : undefined,
       resourceTypes: options?.resourceTypes,
+      includePreviousNavigations: options?.includePreviousNavigations,
     };
   }
 
-  setIncludeConsoleData(value: boolean): void {
-    this.#includeConsoleData = value;
+  setIncludeConsoleData(
+    value: boolean,
+    options?: PaginationOptions & {
+      types?: string[];
+      includePreviousNavigations?: boolean;
+    },
+  ): void {
+    if (!value) {
+      this.#consoleDataOptions = undefined;
+      return;
+    }
+
+    this.#consoleDataOptions = {
+      include: value,
+      pagination:
+        options?.pageSize || options?.pageIdx
+          ? {
+              pageSize: options.pageSize,
+              pageIdx: options.pageIdx,
+            }
+          : undefined,
+      types: options?.types,
+      includePreviousNavigations: options?.includePreviousNavigations,
+    };
   }
 
-  attachNetworkRequest(url: string): void {
-    this.#attachedNetworkRequestData = {
-      networkRequestUrl: url,
-    };
+  attachNetworkRequest(reqid: number): void {
+    this.#attachedNetworkRequestId = reqid;
+  }
+
+  attachConsoleMessage(msgid: number): void {
+    this.#attachedConsoleMessageId = msgid;
   }
 
   get includePages(): boolean {
@@ -96,13 +127,19 @@ export class McpResponse implements Response {
   }
 
   get includeConsoleData(): boolean {
-    return this.#includeConsoleData;
+    return this.#consoleDataOptions?.include ?? false;
   }
-  get attachedNetworkRequestUrl(): string | undefined {
-    return this.#attachedNetworkRequestData?.networkRequestUrl;
+  get attachedNetworkRequestId(): number | undefined {
+    return this.#attachedNetworkRequestId;
   }
   get networkRequestsPageIdx(): number | undefined {
     return this.#networkRequestsOptions?.pagination?.pageIdx;
+  }
+  get consoleMessagesPageIdx(): number | undefined {
+    return this.#consoleDataOptions?.pagination?.pageIdx;
+  }
+  get consoleMessagesTypes(): string[] | undefined {
+    return this.#consoleDataOptions?.types;
   }
 
   appendResponseLine(value: string): void {
@@ -125,6 +162,10 @@ export class McpResponse implements Response {
     return this.#includeSnapshot;
   }
 
+  get includeVersboseSnapshot(): boolean {
+    return this.#includeVerboseSnapshot;
+  }
+
   async handle(
     toolName: string,
     context: McpContext,
@@ -133,42 +174,127 @@ export class McpResponse implements Response {
       await context.createPagesSnapshot();
     }
     if (this.#includeSnapshot) {
-      await context.createTextSnapshot();
+      await context.createTextSnapshot(this.#includeVerboseSnapshot);
     }
 
-    let formattedConsoleMessages: string[];
+    const bodies: {
+      requestBody?: string;
+      responseBody?: string;
+    } = {};
 
-    if (this.#attachedNetworkRequestData?.networkRequestUrl) {
-      const request = context.getNetworkRequestByUrl(
-        this.#attachedNetworkRequestData.networkRequestUrl,
+    if (this.#attachedNetworkRequestId) {
+      const request = context.getNetworkRequestById(
+        this.#attachedNetworkRequestId,
       );
 
-      this.#attachedNetworkRequestData.requestBody =
-        await getFormattedRequestBody(request);
+      bodies.requestBody = await getFormattedRequestBody(request);
 
       const response = request.response();
       if (response) {
-        this.#attachedNetworkRequestData.responseBody =
-          await getFormattedResponseBody(response);
+        bodies.responseBody = await getFormattedResponseBody(response);
       }
     }
 
-    if (this.#includeConsoleData) {
-      const consoleMessages = context.getConsoleData();
-      if (consoleMessages) {
-        formattedConsoleMessages = await Promise.all(
-          consoleMessages.map(message => formatConsoleEvent(message)),
-        );
-        this.#formattedConsoleData = formattedConsoleMessages;
+    let consoleData: ConsoleMessageData | undefined;
+
+    if (this.#attachedConsoleMessageId) {
+      const message = context.getConsoleMessageById(
+        this.#attachedConsoleMessageId,
+      );
+      const consoleMessageStableId = this.#attachedConsoleMessageId;
+      if ('args' in message) {
+        const consoleMessage = message as ConsoleMessage;
+        consoleData = {
+          consoleMessageStableId,
+          type: consoleMessage.type(),
+          message: consoleMessage.text(),
+          args: await Promise.all(
+            consoleMessage.args().map(async arg => {
+              const stringArg = await arg.jsonValue().catch(() => {
+                // Ignore errors.
+              });
+              return typeof stringArg === 'object'
+                ? JSON.stringify(stringArg)
+                : String(stringArg);
+            }),
+          ),
+        };
+      } else {
+        consoleData = {
+          consoleMessageStableId,
+          type: 'error',
+          message: (message as Error).message,
+          args: [],
+        };
       }
     }
 
-    return this.format(toolName, context);
+    let consoleListData: ConsoleMessageData[] | undefined;
+    if (this.#consoleDataOptions?.include) {
+      let messages = context.getConsoleData(
+        this.#consoleDataOptions.includePreviousNavigations,
+      );
+
+      if (this.#consoleDataOptions.types?.length) {
+        const normalizedTypes = new Set(this.#consoleDataOptions.types);
+        messages = messages.filter(message => {
+          if ('type' in message) {
+            return normalizedTypes.has(message.type());
+          }
+          return normalizedTypes.has('error');
+        });
+      }
+
+      consoleListData = await Promise.all(
+        messages.map(async (item): Promise<ConsoleMessageData> => {
+          const consoleMessageStableId =
+            context.getConsoleMessageStableId(item);
+          if ('args' in item) {
+            const consoleMessage = item as ConsoleMessage;
+            return {
+              consoleMessageStableId,
+              type: consoleMessage.type(),
+              message: consoleMessage.text(),
+              args: await Promise.all(
+                consoleMessage.args().map(async arg => {
+                  const stringArg = await arg.jsonValue().catch(() => {
+                    // Ignore errors.
+                  });
+                  return typeof stringArg === 'object'
+                    ? JSON.stringify(stringArg)
+                    : String(stringArg);
+                }),
+              ),
+            };
+          }
+          return {
+            consoleMessageStableId,
+            type: 'error',
+            message: (item as Error).message,
+            args: [],
+          };
+        }),
+      );
+    }
+
+    return this.format(toolName, context, {
+      bodies,
+      consoleData,
+      consoleListData,
+    });
   }
 
   format(
     toolName: string,
     context: McpContext,
+    data: {
+      bodies: {
+        requestBody?: string;
+        responseBody?: string;
+      };
+      consoleData: ConsoleMessageData | undefined;
+      consoleListData: ConsoleMessageData[] | undefined;
+    },
   ): Array<TextContent | ImageContent> {
     const response = [`# ${toolName} response`];
     for (const line of this.#textResponseLines) {
@@ -192,8 +318,12 @@ export class McpResponse implements Response {
 
     const dialog = context.getDialog();
     if (dialog) {
+      const defaultValueIfNeeded =
+        dialog.type() === 'prompt'
+          ? ` (default value: "${dialog.defaultValue()}")`
+          : '';
       response.push(`# Open dialog
-${dialog.type()}: ${dialog.message()} (default value: ${dialog.message()}).
+${dialog.type()}: ${dialog.message()}${defaultValueIfNeeded}.
 Call ${handleDialog.name} to handle it before continuing.`);
     }
 
@@ -218,10 +348,13 @@ Call ${handleDialog.name} to handle it before continuing.`);
       }
     }
 
-    response.push(...this.#getIncludeNetworkRequestsData(context));
+    response.push(...this.#formatNetworkRequestData(context, data.bodies));
+    response.push(...this.#formatConsoleData(data.consoleData));
 
     if (this.#networkRequestsOptions?.include) {
-      let requests = context.getNetworkRequests();
+      let requests = context.getNetworkRequests(
+        this.#networkRequestsOptions?.includePreviousNavigations,
+      );
 
       // Apply resource type filtering if specified
       if (this.#networkRequestsOptions.resourceTypes?.length) {
@@ -242,17 +375,31 @@ Call ${handleDialog.name} to handle it before continuing.`);
         );
         response.push(...data.info);
         for (const request of data.items) {
-          response.push(getShortDescriptionForRequest(request));
+          response.push(
+            getShortDescriptionForRequest(
+              request,
+              context.getNetworkRequestStableId(request),
+            ),
+          );
         }
       } else {
         response.push('No requests found.');
       }
     }
 
-    if (this.#includeConsoleData && this.#formattedConsoleData) {
+    if (this.#consoleDataOptions?.include) {
+      const messages = data.consoleListData ?? [];
+
       response.push('## Console messages');
-      if (this.#formattedConsoleData.length) {
-        response.push(...this.#formattedConsoleData);
+      if (messages.length) {
+        const data = this.#dataWithPagination(
+          messages,
+          this.#consoleDataOptions.pagination,
+        );
+        response.push(...data.info);
+        response.push(
+          ...data.items.map(message => formatConsoleEventShort(message)),
+        );
       } else {
         response.push('<no console messages found>');
       }
@@ -298,14 +445,30 @@ Call ${handleDialog.name} to handle it before continuing.`);
     };
   }
 
-  #getIncludeNetworkRequestsData(context: McpContext): string[] {
+  #formatConsoleData(data: ConsoleMessageData | undefined): string[] {
     const response: string[] = [];
-    const url = this.#attachedNetworkRequestData?.networkRequestUrl;
-    if (!url) {
+    if (!data) {
       return response;
     }
 
-    const httpRequest = context.getNetworkRequestByUrl(url);
+    response.push(formatConsoleEventVerbose(data));
+    return response;
+  }
+
+  #formatNetworkRequestData(
+    context: McpContext,
+    data: {
+      requestBody?: string;
+      responseBody?: string;
+    },
+  ): string[] {
+    const response: string[] = [];
+    const id = this.#attachedNetworkRequestId;
+    if (!id) {
+      return response;
+    }
+
+    const httpRequest = context.getNetworkRequestById(id);
     response.push(`## Request ${httpRequest.url()}`);
     response.push(`Status:  ${getStatusFromRequest(httpRequest)}`);
     response.push(`### Request Headers`);
@@ -313,9 +476,9 @@ Call ${handleDialog.name} to handle it before continuing.`);
       response.push(line);
     }
 
-    if (this.#attachedNetworkRequestData?.requestBody) {
+    if (data.requestBody) {
       response.push(`### Request Body`);
-      response.push(this.#attachedNetworkRequestData.requestBody);
+      response.push(data.requestBody);
     }
 
     const httpResponse = httpRequest.response();
@@ -326,9 +489,9 @@ Call ${handleDialog.name} to handle it before continuing.`);
       }
     }
 
-    if (this.#attachedNetworkRequestData?.responseBody) {
+    if (data.responseBody) {
       response.push(`### Response Body`);
-      response.push(this.#attachedNetworkRequestData.responseBody);
+      response.push(data.responseBody);
     }
 
     const httpFailure = httpRequest.failure();
@@ -343,7 +506,7 @@ Call ${handleDialog.name} to handle it before continuing.`);
       let indent = 0;
       for (const request of redirectChain.reverse()) {
         response.push(
-          `${'  '.repeat(indent)}${getShortDescriptionForRequest(request)}`,
+          `${'  '.repeat(indent)}${getShortDescriptionForRequest(request, context.getNetworkRequestStableId(request))}`,
         );
         indent++;
       }

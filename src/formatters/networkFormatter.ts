@@ -6,12 +6,16 @@
 
 import {isUtf8} from 'node:buffer';
 
-import type {HTTPRequest, HTTPResponse} from 'puppeteer-core';
+import type {HTTPRequest, HTTPResponse} from '../third_party/index.js';
 
 const BODY_CONTEXT_SIZE_LIMIT = 10000;
 
-export function getShortDescriptionForRequest(request: HTTPRequest): string {
-  return `${request.url()} ${request.method()} ${getStatusFromRequest(request)}`;
+export function getShortDescriptionForRequest(
+  request: HTTPRequest,
+  id: number,
+): string {
+  // TODO truncate the URL
+  return `reqid=${id} ${request.method()} ${request.url()} ${getStatusFromRequest(request)}`;
 }
 
 export function getStatusFromRequest(request: HTTPRequest): string {
@@ -61,8 +65,7 @@ export async function getFormattedResponseBody(
 
     return `<binary data>`;
   } catch {
-    // buffer() call might fail with CDP exception, in this case we don't print anything in the context
-    return;
+    return `<not available anymore>`;
   }
 }
 
@@ -84,8 +87,7 @@ export async function getFormattedRequestBody(
         return `${getSizeLimitedString(fetchData, sizeLimit)}`;
       }
     } catch {
-      // fetchPostData() call might fail with CDP exception, in this case we don't print anything in the context
-      return;
+      return `<not available anymore>`;
     }
   }
 

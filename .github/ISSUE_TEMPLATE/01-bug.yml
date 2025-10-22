@@ -1,8 +1,7 @@
 name: Bug report
 description: File a bug report for chrome-devtools-mcp
 title: '<short description of the bug>'
-labels:
-  - 'bug'
+type: 'Bug'
 body:
   - id: description
     type: textarea
@@ -71,3 +70,10 @@ body:
         - Windows
         - macOS
         - Linux
+
+  - type: checkboxes
+    id: provide-pr
+    attributes:
+      label: Extra checklist
+      options:
+        - label: I want to provide a PR to fix this bug

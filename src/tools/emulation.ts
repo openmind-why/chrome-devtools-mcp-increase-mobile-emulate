@@ -4,15 +4,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { PredefinedNetworkConditions } from 'puppeteer-core';
+import {zod, PredefinedNetworkConditions} from '../third_party/index.js';
 import { KnownDevices } from 'puppeteer-core';
-import z from 'zod';
-
 import { ToolCategories } from './categories.js';
 import { defineTool } from './ToolDefinition.js';
 
 const throttlingOptions: [string, ...string[]] = [
   'No emulation',
+  'Offline',
   ...Object.keys(PredefinedNetworkConditions),
 ];
 
@@ -58,16 +57,16 @@ function validateDeviceExists(device: string): boolean {
 
 export const emulateNetwork = defineTool({
   name: 'emulate_network',
-  description: `Emulates network conditions such as throttling on the selected page.`,
+  description: `Emulates network conditions such as throttling or offline mode on the selected page.`,
   annotations: {
     category: ToolCategories.EMULATION,
     readOnlyHint: false,
   },
   schema: {
-    throttlingOption: z
+    throttlingOption: zod
       .enum(throttlingOptions)
       .describe(
-        `The network throttling option to emulate. Available throttling options are: ${throttlingOptions.join(', ')}. Set to "No emulation" to disable.`,
+        `The network throttling option to emulate. Available throttling options are: ${throttlingOptions.join(', ')}. Set to "No emulation" to disable. Set to "Offline" to simulate offline network conditions.`,
       ),
   },
   handler: async (request, _response, context) => {
@@ -77,6 +76,17 @@ export const emulateNetwork = defineTool({
     if (conditions === 'No emulation') {
       await page.emulateNetworkConditions(null);
       context.setNetworkConditions(null);
+      return;
+    }
+
+    if (conditions === 'Offline') {
+      await page.emulateNetworkConditions({
+        offline: true,
+        download: 0,
+        upload: 0,
+        latency: 0,
+      });
+      context.setNetworkConditions('Offline');
       return;
     }
 
@@ -99,7 +109,7 @@ export const emulateCpu = defineTool({
     readOnlyHint: false,
   },
   schema: {
-    throttlingRate: z
+    throttlingRate: zod
       .number()
       .min(1)
       .max(20)
@@ -124,13 +134,13 @@ export const emulateDevice = defineTool({
     readOnlyHint: false,
   },
   schema: {
-    device: z
+    device: zod
       .string()
       .optional()
       .describe(
         `The mobile device to emulate. If not specified, defaults to "${getDefaultMobileDevice()}". Available devices include all mobile devices from Puppeteer's KnownDevices (e.g., iPhone 8, iPhone 13, iPhone 14, iPhone 15, Galaxy S8, Galaxy S9+, Pixel 2-5, iPad, iPad Pro, etc.). Use the exact device name as defined in Puppeteer.`,
       ),
-    customUserAgent: z
+    customUserAgent: zod
       .string()
       .optional()
       .describe(
