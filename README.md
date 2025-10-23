@@ -8,6 +8,19 @@
 > **Recommended practice**：  
 > Once the upstream PR is merged, please switch back to the official one `chrome-devtools-mcp` 
 
+Add the following config to your MCP client:
+
+```json
+{
+  "mcpServers": {
+    "chrome-devtools": {
+      "command": "npx",
+      "args": ["chrome-devtools-mcp-increase-devices-emulate-npm@latest"]
+    }
+  }
+}
+```
+
 
 # The following is the original README content:
 
