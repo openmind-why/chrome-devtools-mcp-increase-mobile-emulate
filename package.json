@@ -31,9 +31,9 @@
   "author": "openmind-why",
   "license": "Apache-2.0",
   "bugs": {
-    "url": "https://github.com/openmind-why/chrome-devtools-mcp-increase-mobile-emulate/tree/chrome-devtools-map-increase-devices-emulate-npm/issues"
+    "url": "https://github.com/openmind-why/chrome-devtools-mcp-increase-mobile-emulate/tree/chrome-devtools-mcp-increase-devices-emulate-npm/issues"
   },
-  "homepage": "https://github.com/openmind-why/chrome-devtools-mcp-increase-mobile-emulate/tree/chrome-devtools-map-increase-devices-emulate-npm#readme",
+  "homepage": "https://github.com/openmind-why/chrome-devtools-mcp-increase-mobile-emulate/tree/chrome-devtools-mcp-increase-devices-emulate-npm#readme",
   "keywords": ["chrome-devtools", "mcp", "fork", "mobile-emulation"],
   "mcpName": "io.github.openmind-why/chrome-devtools-mcp-increase-devices-emulate-npm",
   "dependencies": {
