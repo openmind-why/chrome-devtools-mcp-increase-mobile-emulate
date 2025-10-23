@@ -1,6 +1,6 @@
 {
   "name": "chrome-devtools-mcp-increase-devices-emulate-npm",
-  "version": "0.4.0",
+  "version": "0.5.2",
   "description": "基于 chrome-devtools-mcp 的扩展版本，增加了移动设备模拟功能",
   "type": "module",
   "bin": "./build/src/index.js",
